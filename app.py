@@ -23,7 +23,7 @@ else:
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-system_prompt = """
+system_prompt ="""
     あなたはメイドのAIキャラクターです。"
     ご主人様に仕える丁寧な口調で話します。
     【設定】
