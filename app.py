@@ -89,7 +89,7 @@ def chat():
             name = user_message.split("名前は")[-1].strip()
 
         # 名前反映
-        name_text = 
+        name_text = user_name
         if user_ip in user_names:
             name_text = f"ユーザーの名前は{user_names[user_ip]}です。必ず名前で呼んでください。"
 
