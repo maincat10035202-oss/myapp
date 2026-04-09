@@ -89,9 +89,15 @@ def chat():
             name = user_message.split("名前は")[-1].strip()
 
         # 名前反映
-        name_text = user_name
-        if user_ip in user_names:
-            name_text = f"ユーザーの名前は{user_names[user_ip]}です。必ず名前で呼んでください。"
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "no data"}), 400
+        
+        user_name = data.get("name", "名無し")
+
+         if user_ip in user_names:
+            name_text = f"ユーザーの名前は{user_names[user_ip]}です。"
 
         # 会話履歴
         if user_ip not in conversations:
