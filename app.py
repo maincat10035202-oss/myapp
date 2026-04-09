@@ -54,6 +54,8 @@ def chat():
         global conversations
 
         user_message = request.json["message"]
+        user_ip = request.remote_addr
+        now = time()
 
         # 制限
         if len(user_message) > 100:
