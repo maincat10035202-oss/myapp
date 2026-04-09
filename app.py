@@ -10,6 +10,17 @@ import json
 app = Flask(__name__)
 CORS(app)
 
+# ←ここに書く（グローバル）
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MEMORY_PATH = os.path.join(BASE_DIR, "memory.json")
+
+# 起動時に読み込み
+if os.path.exists(MEMORY_PATH):
+    with open(MEMORY_PATH, "r", encoding="utf-8") as f:
+        data = json.load(f)
+else:
+    data = {}
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 system_prompt = """
