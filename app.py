@@ -1,6 +1,4 @@
-print("このファイルが実行されています")
-
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from openai import OpenAI
 import os
@@ -10,22 +8,36 @@ import json
 app = Flask(__name__)
 CORS(app)
 
-# ←ここに書く（グローバル）
+# =========================
+# パス設定
+# =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MEMORY_PATH = os.path.join(BASE_DIR, "memory.json")
 
-# 起動時に読み込み
+# =========================
+# メモリ読み込み
+# =========================
 if os.path.exists(MEMORY_PATH):
     with open(MEMORY_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
+        conversations = data.get("conversations", {})
+        user_names = data.get("user_names", {})
 else:
-    data = {}
+    conversations = {}
+    user_names = {}
 
+# =========================
+# OpenAI
+# =========================
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# =========================
+# system prompt
+# =========================
 system_prompt = """
-あなたはメイドのAIキャラクターです。"
+あなたはメイドのAIキャラクターです。
 ご主人様に仕える丁寧な口調で話します。
+
 【設定】
 ・ユーザーのサポートを行うメイド
 ・基本は丁寧な敬語
@@ -41,36 +53,40 @@ system_prompt = """
 ・失敗すると「申し訳ございません…！」と反省
 """
 
+# =========================
+# リクエスト制限用
+# =========================
 user_requests = {}
 
-# ✅ 正しい読み込み
-if os.path.exists(""):
-    with open("", "r", encoding="utf-8") as f:
-        data = json.load(f)
-        conversations = data.get("conversations", {})
-        user_names = data.get("user_names", {})
-else:
-    conversations = {}
-    user_names = {}
-
+# =========================
+# ルート
+# =========================
 @app.route("/")
 def index():
-    return send_file("index.html")
+    return send_from_directory(".", "index.html")
 
+# =========================
+# チャットAPI
+# =========================
 @app.route("/chat", methods=["POST"])
 def chat():
-    try:
-        global user_names
-        global conversations
+    global user_names, conversations
 
-        user_message = request.json["message"]
+    try:
+        data = request.get_json()
+
+        if not data or "message" not in data:
+            return jsonify({"reply": "メッセージが取得できませんでした"})
+
+        user_message = data["message"]
         user_ip = request.remote_addr
         now = time()
 
-        # 制限
+        # 長さ制限
         if len(user_message) > 100:
-            return jsonify({"reply": "ご主人様、少し長すぎます…！"})
+            return jsonify({"reply": "長すぎます！"})
 
+        # レート制限
         if user_ip not in user_requests:
             user_requests[user_ip] = []
 
@@ -79,36 +95,33 @@ def chat():
         ]
 
         if len(user_requests[user_ip]) >= 5:
-            return jsonify({"reply": "少しお休みくださいませ"})
+            return jsonify({"reply": "少し待ってください"})
 
         user_requests[user_ip].append(now)
 
-        # 名前記憶
+        # 名前登録
         if "名前は" in user_message:
             name = user_message.split("名前は")[-1].strip()
+            user_names[user_ip] = name
 
-        # 名前反映
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "no data"}), 400
-        
-        user_name = data.get("name", "名無し")
-
-         if user_ip in user_names:
+        # 名前テキスト
+        name_text = ""
+        if user_ip in user_names:
             name_text = f"ユーザーの名前は{user_names[user_ip]}です。"
 
-        # 会話履歴
+        # 会話履歴初期化
         if user_ip not in conversations:
             conversations[user_ip] = [
                 {"role": "system", "content": system_prompt + name_text}
             ]
 
+        # ユーザー追加
         conversations[user_ip].append({
             "role": "user",
             "content": user_message
         })
 
+        # OpenAI呼び出し
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=conversations[user_ip]
@@ -116,16 +129,18 @@ def chat():
 
         reply = response.choices[0].message.content
 
+        # アシスタント追加
         conversations[user_ip].append({
             "role": "assistant",
             "content": reply
         })
 
+        # 履歴制限
         if len(conversations[user_ip]) > 10:
             conversations[user_ip] = conversations[user_ip][-10:]
 
         # 保存
-        with open("", "w", encoding="utf-8") as f:
+        with open(MEMORY_PATH, "w", encoding="utf-8") as f:
             json.dump({
                 "conversations": conversations,
                 "user_names": user_names
@@ -137,5 +152,9 @@ def chat():
         print("エラー:", e)
         return jsonify({"reply": "エラーが発生しました"})
 
+# =========================
+# 起動
+# =========================
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
